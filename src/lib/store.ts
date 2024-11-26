@@ -6,15 +6,15 @@ interface UserSettings {
   cryptoEnabled: boolean;
   city: string;
   selectedCoins: string[];
-  jokesRemaining: number;
-  lastResetDate: string;
+  jokesViewed: number;
+  lastVisitDate: string;
 }
 
 interface SettingsStore extends UserSettings {
   updateSettings: (settings: Partial<UserSettings>) => void;
   resetSettings: () => void;
-  decrementJokes: () => void;
-  resetJokesIfNewDay: () => void;
+  incrementJokesViewed: () => void;
+  resetJokesCount: () => void;
 }
 
 const initialState: UserSettings = {
@@ -22,8 +22,8 @@ const initialState: UserSettings = {
   cryptoEnabled: false,
   city: '',
   selectedCoins: [],
-  jokesRemaining: 10,
-  lastResetDate: new Date().toDateString(),
+  jokesViewed: 0,
+  lastVisitDate: new Date().toDateString(),
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -32,20 +32,10 @@ export const useSettingsStore = create<SettingsStore>()(
       ...initialState,
       updateSettings: (settings) => set((state) => ({ ...state, ...settings })),
       resetSettings: () => set(initialState),
-      decrementJokes: () =>
-        set((state) => ({ jokesRemaining: Math.max(0, state.jokesRemaining - 1) })),
-      resetJokesIfNewDay: () =>
-        set((state) => {
-          const today = new Date().toDateString();
-          if (today !== state.lastResetDate) {
-            return {
-              ...state,
-              jokesRemaining: 10,
-              lastResetDate: today,
-            };
-          }
-          return state;
-        }),
+      incrementJokesViewed: () =>
+        set((state) => ({ jokesViewed: state.jokesViewed + 1 })),
+      resetJokesCount: () =>
+        set((state) => ({ jokesViewed: 0, lastVisitDate: new Date().toDateString() })),
     }),
     {
       name: 'wagmistuff-settings',

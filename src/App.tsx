@@ -4,7 +4,8 @@ import { useSettingsStore } from './lib/store';
 import { Setup } from './components/Setup';
 import { CryptoCard } from './components/CryptoCard';
 import { WeatherCard } from './components/WeatherCard';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
+import { fetchDadJoke, fetchWeather, fetchCoinList, fetchCryptoPrices } from './services/api';
 
 interface CoinInfo {
   id: string;
@@ -23,95 +24,86 @@ function App() {
     cryptoEnabled, 
     city, 
     selectedCoins, 
-    jokesRemaining, 
-    decrementJokes,
-    resetJokesIfNewDay 
+    jokesViewed,
+    incrementJokesViewed,
+    resetJokesCount,
+    lastVisitDate 
   } = useSettingsStore();
 
   const fetchJoke = async () => {
-    if (jokesRemaining === 0) {
-      toast.error('No more jokes available today!');
-      return;
-    }
-    try {
-      const response = await fetch('https://icanhazdadjoke.com/', {
-        headers: { 
-          'Accept': 'application/json',
-          'User-Agent': 'WAGMISTUFF Dad Jokes (https://wagmistuff.com)'
-        }
-      });
-      const data = await response.json();
-      setJoke(data.joke);
-      decrementJokes();
-      if (jokesRemaining <= 5) {
-        toast('Your coffee is getting cold, you should drink it', {
+    const newJoke = await fetchDadJoke();
+    if (newJoke) {
+      setJoke(newJoke);
+      incrementJokesViewed();
+      
+      if (jokesViewed === 2) {
+        toast('Careful, 3 dad jokes are 3 jokes too much', {
+          icon: '😅',
+          duration: 3000
+        });
+      } else if (jokesViewed === 4) {
+        toast('Drink some coffee, its getting cold', {
           icon: '☕',
           duration: 3000
         });
+      } else if (jokesViewed === 6) {
+        toast('Are you kidding? How long is your break?', {
+          icon: '⏰',
+          duration: 3000
+        });
       }
-    } catch (error) {
-      console.error('Error fetching joke:', error);
-      toast.error('Failed to fetch joke. Please try again.');
     }
   };
 
   const shareJoke = () => {
-    navigator.share({
-      title: 'Daily Dad Joke',
-      text: joke,
-      url: window.location.href,
-    }).catch(console.error);
+    if ('share' in navigator) {
+      navigator.share({
+        title: 'Daily Dad Joke',
+        text: joke,
+        url: window.location.href,
+      }).catch(error => {
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          toast.error('Unable to share joke');
+        }
+      });
+    } else {
+      navigator.clipboard.writeText(joke).then(() => {
+        toast.success('Joke copied to clipboard!');
+      }).catch(() => {
+        toast.error('Failed to copy joke');
+      });
+    }
   };
 
   React.useEffect(() => {
-    resetJokesIfNewDay();
+    const today = new Date().toDateString();
+    if (today !== lastVisitDate) {
+      resetJokesCount();
+    }
     fetchJoke();
-    
-    // Fetch coin list once
-    fetch('https://api.coingecko.com/api/v3/coins/list')
-      .then(res => res.json())
-      .then(data => {
-        setCoinList(data);
-      })
-      .catch(console.error);
+    fetchCoinList().then(setCoinList);
   }, []);
 
   React.useEffect(() => {
     if (weatherEnabled && city) {
-      fetch(`https://api.weatherapi.com/v1/current.json?key=b7fc36f88fd2432195a231037242511&q=${encodeURIComponent(city)}&aqi=no`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.error) {
-            toast.error(data.error.message || 'City not found');
-            return;
-          }
-          setWeather(data);
-        })
-        .catch(error => {
-          console.error('Error fetching weather:', error);
-          toast.error('Failed to fetch weather data');
-        });
+      fetchWeather(city).then(data => {
+        if (data?.error) {
+          toast.error(data.error.message || 'City not found');
+          return;
+        }
+        setWeather(data);
+      });
     }
 
     if (cryptoEnabled && selectedCoins.length > 0) {
-      fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${selectedCoins.join(',')}&vs_currencies=usd&include_24hr_change=true`)
-        .then(res => res.json())
-        .then(data => {
-          if (!data || Object.keys(data).length === 0) {
-            toast.error('Failed to fetch crypto prices');
-            return;
-          }
-          setCryptoPrices(data);
-        })
-        .catch(error => {
-          console.error('Error fetching crypto prices:', error);
-          toast.error('Failed to fetch crypto prices');
-        });
+      fetchCryptoPrices(selectedCoins).then(setCryptoPrices);
     }
   }, [weatherEnabled, cryptoEnabled, city, selectedCoins]);
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster position="top-right" />
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -145,8 +137,7 @@ function App() {
             <div className="flex gap-2">
               <button
                 onClick={fetchJoke}
-                disabled={jokesRemaining === 0}
-                className="p-2 hover:bg-gray-100 rounded-full transition disabled:opacity-50"
+                className="p-2 hover:bg-gray-100 rounded-full transition"
               >
                 <RefreshCw className="w-5 h-5" />
               </button>
@@ -158,7 +149,7 @@ function App() {
               </button>
             </div>
           </div>
-          <p className="text-sm text-gray-500">Jokes remaining today: {jokesRemaining}</p>
+          <p className="text-sm text-gray-500">Dad jokes viewed today: {jokesViewed}</p>
         </div>
 
         {weatherEnabled && weather && (
@@ -166,21 +157,24 @@ function App() {
         )}
 
         {cryptoEnabled && selectedCoins.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {selectedCoins.map((coinId) => {
-              const coinInfo = coinList.find(c => c.id === coinId);
-              if (!coinInfo) return null;
-              
-              return (
-                <CryptoCard
-                  key={coinId}
-                  symbol={coinInfo.symbol}
-                  name={coinInfo.name}
-                  price={cryptoPrices[coinId]?.usd || 0}
-                  change={cryptoPrices[coinId]?.usd_24h_change || 0}
-                />
-              );
-            })}
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 className="text-2xl font-['Righteous'] mb-6 text-gray-800">Tracked Coins</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {selectedCoins.map((coinId) => {
+                const coinInfo = coinList.find(c => c.id === coinId);
+                if (!coinInfo) return null;
+                
+                return (
+                  <CryptoCard
+                    key={coinId}
+                    symbol={coinInfo.symbol}
+                    name={coinInfo.name}
+                    price={cryptoPrices[coinId]?.usd || 0}
+                    change={cryptoPrices[coinId]?.usd_24h_change || 0}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
       </main>

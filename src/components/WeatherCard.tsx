@@ -13,7 +13,7 @@ export function WeatherCard({ weather, city }: WeatherCardProps) {
     <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-xl font-semibold mb-1">Weather in {city}</h2>
+          <h2 className="text-2xl font-['Righteous'] mb-1">The weather in {city} right now:</h2>
           <div className="flex items-center gap-2">
             <img 
               src={weather.current.condition.icon} 

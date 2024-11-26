@@ -1,5 +1,7 @@
 import React from 'react';
 import { Search } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { fetchCoinList } from '../services/api';
 
 interface Coin {
   id: string;
@@ -19,20 +21,10 @@ export function CoinSearch({ selectedCoins, onToggleCoin }: CoinSearchProps) {
   const [filteredCoins, setFilteredCoins] = React.useState<Coin[]>([]);
 
   React.useEffect(() => {
-    const fetchCoins = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/list');
-        const data = await response.json();
-        setCoins(data);
-      } catch (error) {
-        console.error('Error fetching coins:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCoins();
+    setLoading(true);
+    fetchCoinList()
+      .then(setCoins)
+      .finally(() => setLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -40,7 +32,7 @@ export function CoinSearch({ selectedCoins, onToggleCoin }: CoinSearchProps) {
       coin =>
         coin.name.toLowerCase().includes(search.toLowerCase()) ||
         coin.symbol.toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 50); // Limit to 50 results for better performance
+    ).slice(0, 50);
     setFilteredCoins(filtered);
   }, [search, coins]);
 
@@ -82,6 +74,11 @@ export function CoinSearch({ selectedCoins, onToggleCoin }: CoinSearchProps) {
               </div>
             </button>
           ))}
+          {filteredCoins.length === 0 && !loading && (
+            <div className="text-center py-4 text-gray-500">
+              No coins found matching your search
+            </div>
+          )}
         </div>
       )}
     </div>
